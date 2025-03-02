@@ -194,23 +194,20 @@ class MainScene extends Phaser.Scene {
       // Initialize wave system
       this.initializeWaveSystem();
       
-      // Modify the input listener to handle both placement and selection
+      // Replace the two duplicate pointerdown handlers with this single one
       this.input.on('pointerdown', (pointer) => {
         // Only process clicks within the game area
         if (pointer.y > this.gameArea.y && pointer.y < this.gameArea.y + this.gameArea.height) {
-            // If clicking on nothing, try to place a turret
-            if (!this.selectedTurret) {
+            if (this.selectedTurret) {
+                // If we have a selected turret and clicked outside of it, deselect it
+                if (!this.selectedTurret.getBounds().contains(pointer.x, pointer.y)) {
+                    this.deselectTurret();
+                }
+            } else {
+                // If no turret is selected, try to place a new one
                 this.placeTower(pointer);
             }
         }
-      });
-
-      // Add a background click handler to deselect turret
-      this.input.on('pointerdown', (pointer) => {
-          // If clicked outside any turret, deselect current turret
-          if (this.selectedTurret && !this.selectedTurret.getBounds().contains(pointer.x, pointer.y)) {
-              this.deselectTurret();
-          }
       });
 
       // Add overlap so bullets can hit enemies
@@ -220,15 +217,6 @@ class MainScene extends Phaser.Scene {
       this.input.on('pointermove', (pointer) => {
         if (this.selectedTurretType !== null) {
             this.updatePlacementPreview(pointer);
-        }
-      });
-
-      // Update the existing pointerdown listener
-      this.input.on('pointerdown', (pointer) => {
-        if (pointer.y > this.gameArea.y && pointer.y < this.gameArea.y + this.gameArea.height) {
-            if (!this.selectedTurret) {
-                this.placeTower(pointer);
-            }
         }
       });
     }
@@ -670,18 +658,21 @@ class MainScene extends Phaser.Scene {
     placeTower(pointer) {
         // Only allow placement if a turret type is selected
         if (this.selectedTurretType === null) {
-            const helpText = this.add.text(pointer.x, pointer.y - 20, 'Select a turret first!', {
-                font: '16px Arial',
-                fill: '#ffffff'
-            }).setOrigin(0.5);
-            
-            this.tweens.add({
-                targets: helpText,
-                alpha: 0,
-                y: pointer.y - 40,
-                duration: 1000,
-                onComplete: () => helpText.destroy()
-            });
+            // Only show help text if we're not already showing a preview
+            if (!this.placementPreview) {
+                const helpText = this.add.text(pointer.x, pointer.y - 20, 'Select a turret first!', {
+                    font: '16px Arial',
+                    fill: '#ffffff'
+                }).setOrigin(0.5);
+                
+                this.tweens.add({
+                    targets: helpText,
+                    alpha: 0,
+                    y: pointer.y - 40,
+                    duration: 1000,
+                    onComplete: () => helpText.destroy()
+                });
+            }
             return;
         }
 
