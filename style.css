@@ -26,15 +26,15 @@ body {
     }
 }
 
-/* Add some ambient glow effects */
+/* Update ambient glow effect */
 .background::after {
     content: '';
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 800px;
-    height: 600px;
-    background: radial-gradient(circle, rgba(86,24,128,0.2) 0%, rgba(26,26,26,0) 70%);
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at center, rgba(86,24,128,0.15) 0%, rgba(26,26,26,0) 70%);
     pointer-events: none;
 }
