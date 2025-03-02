@@ -3,7 +3,7 @@ window.onload = function() {
       type: Phaser.AUTO,
       width: 800,
       height: 600,
-      backgroundColor: '#2d2d2d',
+      backgroundColor: '#1a1a1a',  // Darker background to match the grid
       physics: {
         default: 'arcade',
         arcade: {
@@ -31,25 +31,90 @@ class MenuScene extends Phaser.Scene {
             fill: '#ffffff'
         }).setOrigin(0.5);
 
-        // Add start button
-        const startButton = this.add.text(centerX, centerY + 50, 'Start Game', {
-            font: '32px Arial',
+        // Create modern start button
+        const buttonWidth = 200;
+        const buttonHeight = 60;
+        
+        // Add gradient glow effect behind button
+        const glow = this.add.rectangle(centerX, centerY + 50, buttonWidth + 20, buttonHeight + 20, 0x8800ff, 0.2)
+            .setOrigin(0.5)
+            .setBlendMode(Phaser.BlendModes.ADD);
+
+        // Create multiple borders for gradient effect
+        const borders = [];
+        const borderCount = 4;
+        for(let i = 0; i < borderCount; i++) {
+            const scale = 1 + (i * 0.01);
+            const alpha = 0.5 - (i * 0.1);
+            const border = this.add.rectangle(centerX, centerY + 50, buttonWidth, buttonHeight, 0x8800ff, alpha)
+                .setOrigin(0.5)
+                .setScale(scale)
+                .setStrokeStyle(2, 0x8800ff);
+            borders.push(border);
+        }
+        
+        // Button background with gradient
+        const button = this.add.rectangle(centerX, centerY + 50, buttonWidth, buttonHeight, 0x222222)
+            .setOrigin(0.5)
+            .setInteractive();
+
+        // Button text with shadow
+        const buttonText = this.add.text(centerX, centerY + 50, 'START GAME', {
+            font: 'bold 24px Arial',
             fill: '#ffffff'
         }).setOrigin(0.5)
-        .setInteractive()
-        .setPadding(15)
-        .setStyle({ backgroundColor: '#111' });
+          .setShadow(0, 0, '#8800ff', 8, true, true);
 
-        startButton.on('pointerdown', () => {
-            this.scene.start('MainScene');
+        // Pulse animation for glow and borders
+        this.tweens.add({
+            targets: [glow, ...borders],
+            alpha: '+=0.2',
+            yoyo: true,
+            duration: 1500,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
         });
 
-        startButton.on('pointerover', () => {
-            startButton.setStyle({ fill: '#ff0' });
+        // Button hover effects
+        button.on('pointerover', () => {
+            button.setFillStyle(0x444444);
+            buttonText.setScale(1.1);
+            glow.setAlpha(0.5);
+            borders.forEach((border, i) => {
+                border.setAlpha(0.7 - (i * 0.15));
+            });
+            this.tweens.add({
+                targets: [button, ...borders, buttonText],
+                y: centerY + 45,
+                duration: 100
+            });
         });
 
-        startButton.on('pointerout', () => {
-            startButton.setStyle({ fill: '#fff' });
+        button.on('pointerout', () => {
+            button.setFillStyle(0x222222);
+            buttonText.setScale(1);
+            glow.setAlpha(0.2);
+            borders.forEach((border, i) => {
+                border.setAlpha(0.5 - (i * 0.1));
+            });
+            this.tweens.add({
+                targets: [button, ...borders, buttonText],
+                y: centerY + 50,
+                duration: 100
+            });
+        });
+
+        // Click effect
+        button.on('pointerdown', () => {
+            button.setFillStyle(0x111111);
+            this.tweens.add({
+                targets: [button, ...borders, buttonText],
+                y: centerY + 52,
+                duration: 50,
+                onComplete: () => {
+                    this.scene.start('MainScene');
+                }
+            });
         });
     }
 }
@@ -332,27 +397,73 @@ class MainScene extends Phaser.Scene {
     }
 
     initializeWaveSystem() {
+        // Add enemy type definitions
+        this.enemyTypes = {
+            basic: {
+                hp: 3,
+                speed: 12000,
+                scale: 1,
+                color: 0xff0000,
+                reward: 20,
+                score: 10
+            },
+            fast: {
+                hp: 2,
+                speed: 8000,
+                scale: 0.8,
+                color: 0x00ff00,
+                reward: 25,
+                score: 15
+            },
+            tank: {
+                hp: 8,
+                speed: 15000,
+                scale: 1.5,
+                color: 0x0000ff,
+                reward: 35,
+                score: 25
+            },
+            boss: {
+                hp: 15,
+                speed: 15000,
+                scale: 2,
+                color: 0xFF00FF,
+                reward: 100,
+                score: 50,
+                spawnOnDeath: 4
+            },
+            minion: {  // Spawned from boss
+                hp: 2,
+                speed: 10000,
+                scale: 0.7,
+                color: 0xFF00FF,
+                reward: 15,
+                score: 10
+            }
+        };
+
         this.waves = [
             {
                 name: 'Wave 1 - Basic',
                 enemies: [
-                    { count: 5, delay: 2000, hp: 3, speed: 12000, type: 'basic' }
+                    { count: 3, delay: 2000, type: 'basic' },
+                    { count: 2, delay: 1000, type: 'fast' }
                 ]
             },
             {
                 name: 'Wave 2 - Groups',
                 enemies: [
-                    { count: 3, delay: 500, hp: 3, speed: 11000, type: 'basic' },
-                    { delay: 3000 }, // Pause between groups
-                    { count: 3, delay: 500, hp: 3, speed: 11000, type: 'basic' },
+                    { count: 2, delay: 500, type: 'tank' },
                     { delay: 3000 },
-                    { count: 4, delay: 400, hp: 4, speed: 10000, type: 'basic' }
+                    { count: 4, delay: 500, type: 'fast' },
+                    { delay: 3000 },
+                    { count: 3, delay: 400, type: 'basic' }
                 ]
             },
             {
                 name: 'Wave 3 - Boss',
                 enemies: [
-                    { count: 1, delay: 1000, hp: 15, speed: 15000, type: 'boss', spawnOnDeath: 4 }
+                    { count: 1, delay: 1000, type: 'boss' }
                 ]
             }
         ];
@@ -487,23 +598,24 @@ class MainScene extends Phaser.Scene {
     }
 
     spawnEnemy(config) {
-        // Create an enemy as a follower of the path
+        const enemyType = this.enemyTypes[config.type];
         const pathStart = this.path.getStartPoint();
         let enemy = this.add.follower(this.path, pathStart.x, pathStart.y, 'enemy');
         this.physics.add.existing(enemy);
         
-        // Set enemy properties
-        enemy.hp = config.hp || 3;
-        enemy.spawnOnDeath = config.spawnOnDeath || 0;
-        enemy.isBoss = config.type === 'boss';
+        // Set enemy properties from type configuration
+        enemy.hp = enemyType.hp;
+        enemy.speed = enemyType.speed;
+        enemy.scale = enemyType.scale;
+        enemy.reward = enemyType.reward;
+        enemy.score = enemyType.score;
+        enemy.spawnOnDeath = enemyType.spawnOnDeath || 0;
+        enemy.type = config.type;
         enemy.reachedEnd = false;
         enemy.active = true;
-        enemy.speed = config.speed || 12000;
         
-        if (enemy.isBoss) {
-            enemy.setScale(2);
-            enemy.setTint(0xFF00FF);
-        }
+        enemy.setScale(enemyType.scale);
+        enemy.setTint(enemyType.color);
         
         enemy.startFollow({
             duration: enemy.speed,
@@ -640,28 +752,22 @@ class MainScene extends Phaser.Scene {
             bullet.destroy();
         
             if (enemy.hp <= 0) {
-                if (enemy.isBoss && enemy.spawnOnDeath) {
-                    // Update total enemies to account for spawned enemies
+                if (enemy.spawnOnDeath) {
                     this.waveState.totalEnemiesInWave += enemy.spawnOnDeath;
                     
-                    // Spawn multiple basic enemies when boss dies
                     for (let i = 0; i < enemy.spawnOnDeath; i++) {
                         this.spawnEnemy({
-                            hp: 2,
-                            speed: 10000,
-                            type: 'basic'
+                            type: 'minion'
                         });
                     }
                 }
     
-                // Give currency reward for killing enemy
-                const reward = enemy.isBoss ? 50 : 20;
-                this.currency += reward;
+                this.currency += enemy.reward;
                 this.updateCurrencyDisplay();
     
                 this.waveState.enemiesKilledThisWave++;
                 enemy.destroy();
-                this.score += enemy.isBoss ? 30 : 10;
+                this.score += enemy.score;
                 this.scoreText.setText(this.score);
                 
                 this.checkWaveCompletion();

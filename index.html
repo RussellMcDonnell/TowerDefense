@@ -3,15 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <title>Tower Defense Game</title>
-  <!-- Load Phaser 3 from a CDN -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.js"></script>
+  <link rel="stylesheet" href="style.css">
   <style>
     body { margin: 0; }
-    canvas { display: block; margin: 0 auto; }
+    canvas { 
+      display: block; 
+      margin: 0 auto; 
+      position: relative;
+      z-index: 1;
+    }
   </style>
 </head>
 <body>
-  <!-- Include the game script -->
+  <div class="background"></div>
   <script src="game.js"></script>
 </body>
 </html>
