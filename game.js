@@ -121,9 +121,9 @@ class MenuScene extends Phaser.Scene {
 
 class MainScene extends Phaser.Scene {
     constructor() {
-      super("MainScene");
+        super("MainScene");
     }
-  
+
     preload() {
       // Create a simple enemy texture: a red circle.
       // (You can replace this with actual sprite loading, e.g. this.load.image('enemy', 'enemy.png');)
@@ -141,6 +141,10 @@ class MainScene extends Phaser.Scene {
     }
   
     create() {
+        // Add these properties after the other initialization
+        this.selectedTurret = null;
+        this.turretDetailsPanel = null;
+
       // Create UI background bars
       this.createUIBars();
 
@@ -181,7 +185,7 @@ class MainScene extends Phaser.Scene {
       this.defineTurretTypes();
       
       // Track which turret type is currently selected
-      this.selectedTurretType = 0;
+      this.selectedTurretType = null; // Changed from 0 to null
   
       // Create turret selection UI at bottom
       this.createTurretSelectionUI();
@@ -189,14 +193,25 @@ class MainScene extends Phaser.Scene {
       // Initialize wave system
       this.initializeWaveSystem();
       
-      // Listen for clicks on the game world to place a turret
+      // Modify the input listener to handle both placement and selection
       this.input.on('pointerdown', (pointer) => {
-        // Only allow placement within the game area
+        // Only process clicks within the game area
         if (pointer.y > this.gameArea.y && pointer.y < this.gameArea.y + this.gameArea.height) {
-          this.placeTower(pointer);
+            // If clicking on nothing, try to place a turret
+            if (!this.selectedTurret) {
+                this.placeTower(pointer);
+            }
         }
-      }, this);
-  
+      });
+
+      // Add a background click handler to deselect turret
+      this.input.on('pointerdown', (pointer) => {
+          // If clicked outside any turret, deselect current turret
+          if (this.selectedTurret && !this.selectedTurret.getBounds().contains(pointer.x, pointer.y)) {
+              this.deselectTurret();
+          }
+      });
+
       // Add overlap so bullets can hit enemies
       this.physics.add.overlap(this.bullets, this.enemies, this.hitEnemy, null, this);
     }
@@ -257,8 +272,8 @@ class MainScene extends Phaser.Scene {
     createTurretSelectionUI() {
         const padding = 20;
         const buttonWidth = 120;
-        const buttonHeight = 80;  // Increased height for better spacing
-        const startY = 530;  // Moved up slightly
+        const buttonHeight = 80;
+        const startY = 530;
         const startX = (800 - (this.turretTypes.length * (buttonWidth + padding) - padding)) / 2;
 
         this.turretButtons = [];
@@ -270,42 +285,45 @@ class MainScene extends Phaser.Scene {
             const container = this.add.container(x, startY);
             container.setDepth(2);
             
-            // Create button background with rounded corners
-            const button = this.add.rectangle(0, 0, buttonWidth, buttonHeight, turret.color)
+            // Create modern button background
+            const button = this.add.rectangle(0, 0, buttonWidth, buttonHeight, 0x222222)
                 .setInteractive()
+                .setOrigin(0, 0)
+                .setStrokeStyle(1, 0x444444);  // Fixed duplicate setStrokeStyle
+
+            // Add subtle gradient overlay
+            const gradient = this.add.rectangle(0, 0, buttonWidth, buttonHeight, 0xffffff, 0.05)
                 .setOrigin(0, 0);
 
-            // Add inner glow effect using a slightly larger rectangle behind
-            const glow = this.add.rectangle(0, 0, buttonWidth, buttonHeight, turret.color, 0.3)
-                .setOrigin(0, 0)
-                .setScale(1.1)
-                .setVisible(false);
+            // Add turret icon with colored circle background
+            const iconBg = this.add.circle(buttonWidth/2, 22, 15, turret.color, 0.2)
+                .setStrokeStyle(2, turret.color);
+            const turretIcon = this.add.circle(buttonWidth/2, 22, 8, turret.color);
 
-            // Add turret visual representation (circle)
-            const turretIcon = this.add.circle(buttonWidth/2, 20, 10, turret.color)
-                .setStrokeStyle(2, 0xffffff);
-
-            // Add turret name with shadow
-            const nameText = this.add.text(buttonWidth/2, 40, turret.name, {
-                font: 'bold 18px Arial',
+            // Add turret name with modern style
+            const nameText = this.add.text(buttonWidth/2, 45, turret.name, {
+                font: 'bold 16px Arial',
                 fill: '#ffffff'
-            }).setOrigin(0.5)
-              .setShadow(1, 1, '#000000', 3);
+            }).setOrigin(0.5);
 
-            // Add cost with icon
-            const costText = this.add.text(buttonWidth/2, 65, `💰${turret.cost}`, {
-                font: '16px Arial',
-                fill: '#ffff00'
+            // Add cost with modern style
+            const costText = this.add.text(buttonWidth/2, 65, `${turret.cost}`, {
+                font: '14px Arial',
+                fill: '#ffcc00'
             }).setOrigin(0.5)
               .setShadow(1, 1, '#000000', 2);
+            const coinIcon = this.add.text(costText.x - (costText.width/2) - 15, 65, '💰', {
+                font: '12px Arial',
+                fill: '#ffcc00'
+            }).setOrigin(0.5);
 
-            container.add([glow, button, turretIcon, nameText, costText]);
+            container.add([button, gradient, iconBg, turretIcon, nameText, costText, coinIcon]);
 
-            // Enhanced hover effects
+            // Button hover effects
             button.on('pointerover', () => {
                 if (this.selectedTurretType !== index) {
                     button.setStrokeStyle(2, 0xffffff);
-                    glow.setVisible(true);
+                    gradient.setAlpha(0.1);
                     container.setScale(1.05);
                     this.tweens.add({
                         targets: container,
@@ -317,8 +335,8 @@ class MainScene extends Phaser.Scene {
 
             button.on('pointerout', () => {
                 if (this.selectedTurretType !== index) {
-                    button.setStrokeStyle(0);
-                    glow.setVisible(false);
+                    button.setStrokeStyle(1, 0x444444);
+                    gradient.setAlpha(0.05);
                     container.setScale(1);
                     this.tweens.add({
                         targets: container,
@@ -330,35 +348,29 @@ class MainScene extends Phaser.Scene {
 
             // Selection handler
             button.on('pointerdown', () => {
-                this.selectedTurretType = index;
-                
-                // Update all buttons
-                this.turretButtons.forEach((btn, i) => {
-                    const isSelected = i === index;
-                    btn.button.setStrokeStyle(isSelected ? 3 : 0, 0xffffff);
-                    btn.glow.setVisible(isSelected);
-                    btn.container.setScale(isSelected ? 1.05 : 1);
-                    this.tweens.add({
-                        targets: btn.container,
-                        y: isSelected ? startY - 5 : startY,
-                        duration: 100
+                if (this.selectedTurretType === index) {
+                    // Deselect if clicking the same turret
+                    this.deselectTurretType();
+                } else {
+                    this.selectedTurretType = index;
+                    
+                    // Update all buttons
+                    this.turretButtons.forEach((btn, i) => {
+                        const isSelected = i === index;
+                        btn.button.setStrokeStyle(isSelected ? 2 : 1, isSelected ? 0xffcc00 : 0x444444);
+                        btn.gradient.setAlpha(isSelected ? 0.15 : 0.05);
+                        btn.container.setScale(isSelected ? 1.1 : 1);
+                        btn.container.y = isSelected ? startY - 10 : startY;
                     });
-                });
+                }
             });
 
             this.turretButtons.push({
                 button,
                 container,
-                glow
+                gradient
             });
         });
-
-        // Set initial selection
-        const initialBtn = this.turretButtons[0];
-        initialBtn.button.setStrokeStyle(3, 0xffffff);
-        initialBtn.glow.setVisible(true);
-        initialBtn.container.setScale(1.05);
-        initialBtn.container.y = startY - 5;
     }
 
     defineTurretTypes() {
@@ -486,7 +498,6 @@ class MainScene extends Phaser.Scene {
     calculateTotalEnemiesInWave(waveIndex) {
         const wave = this.waves[waveIndex];
         let total = 0;
-        
         wave.enemies.forEach(config => {
             if (config.count) {
                 if (config.type === 'boss') {
@@ -497,7 +508,6 @@ class MainScene extends Phaser.Scene {
                 }
             }
         });
-        
         return total;
     }
 
@@ -538,7 +548,6 @@ class MainScene extends Phaser.Scene {
         if (!wave) return;
 
         const enemyConfig = wave.enemies[this.waveState.enemyIndex];
-
         if (!enemyConfig) {
             // No more enemies to spawn in this wave
             this.waveState.isSpawning = false;
@@ -590,7 +599,6 @@ class MainScene extends Phaser.Scene {
                 // Give bonus money between waves
                 this.currency += 50;
                 this.updateCurrencyDisplay();
-                
                 this.waveState.currentWave++;
                 this.startNextWave();
             });
@@ -643,37 +651,180 @@ class MainScene extends Phaser.Scene {
     }
 
     placeTower(pointer) {
-      // Retrieve the currently selected turret type
-      const turretData = this.turretTypes[this.selectedTurretType];
-      
-      // Check if player can afford the turret
-      if (this.currency >= turretData.cost) {
-        // Create a tower at the pointer position
-        let tower = this.add.circle(pointer.x, pointer.y, 15, turretData.color);
-        tower.range = turretData.range;
-        tower.fireRate = turretData.fireRate;
-        tower.lastFired = 0;
-        tower.bulletSpeed = turretData.bulletSpeed;
-        tower.bulletDamage = turretData.bulletDamage;
-        tower.bulletColor = turretData.bulletColor;
-    
-        // Deduct the cost and update currency display
-        this.currency -= turretData.cost;
-        this.updateCurrencyDisplay();
-    
-        this.towers.push(tower);
-      } else {
-        // Show "Cannot afford" message
-        const cannotAffordText = this.add.text(pointer.x, pointer.y - 20, 'Cannot afford!', {
-            font: '16px Arial',
-            fill: '#ff0000'
-        }).setOrigin(0.5);
-        
-        // Remove the text after 1 second
-        this.time.delayedCall(1000, () => {
-            cannotAffordText.destroy();
+        // Only allow placement if a turret type is selected
+        if (this.selectedTurretType === null) {
+            const helpText = this.add.text(pointer.x, pointer.y - 20, 'Select a turret first!', {
+                font: '16px Arial',
+                fill: '#ffffff'
+            }).setOrigin(0.5);
+            
+            this.tweens.add({
+                targets: helpText,
+                alpha: 0,
+                y: pointer.y - 40,
+                duration: 1000,
+                onComplete: () => helpText.destroy()
+            });
+            return;
+        }
+
+        const turretData = this.turretTypes[this.selectedTurretType];
+        if (this.currency >= turretData.cost) {
+            let tower = this.add.circle(pointer.x, pointer.y, 15, turretData.color)
+                .setInteractive()
+                .on('pointerdown', (pointer) => {
+                    pointer.event.stopPropagation();
+                    this.selectTurret(tower);
+                });
+
+            // Add all the tower properties
+            tower.range = turretData.range;
+            tower.fireRate = turretData.fireRate;
+            tower.lastFired = 0;
+            tower.bulletSpeed = turretData.bulletSpeed;
+            tower.bulletDamage = turretData.bulletDamage;
+            tower.bulletColor = turretData.bulletColor;
+            tower.type = this.selectedTurretType;
+            tower.kills = 0;
+            tower.totalDamageDealt = 0;
+
+            this.currency -= turretData.cost;
+            this.updateCurrencyDisplay();
+            this.towers.push(tower);
+
+            // Deselect turret type after placing
+            this.deselectTurretType();
+        } else {
+            // Show "Cannot afford" message
+            const cannotAffordText = this.add.text(pointer.x, pointer.y - 20, 'Cannot afford!', {
+                font: '16px Arial',
+                fill: '#ff0000'
+            }).setOrigin(0.5);
+            
+            // Remove the text after 1 second
+            this.time.delayedCall(1000, () => {
+                cannotAffordText.destroy();
+            });
+        }
+    }
+
+    deselectTurretType() {
+        this.turretButtons.forEach((btn) => {
+            btn.button.setStrokeStyle(1, 0x444444);
+            btn.gradient.setAlpha(0.05);
+            btn.container.y = 530;
         });
-      }
+        this.selectedTurretType = null;
+    }
+
+    selectTurret(tower) {
+        // Deselect previous turret if any
+        this.deselectTurret();
+
+        this.selectedTurret = tower;
+        
+        // Visual feedback for selected turret
+        tower.setStrokeStyle(2, 0xffff00);
+        
+        // Show range circle
+        this.rangeCircle = this.add.circle(tower.x, tower.y, tower.range)
+            .setStrokeStyle(1, 0xffff00, 0.3)
+            .setFillStyle(0xffff00, 0.1);
+
+        // Create details panel
+        this.createTurretDetailsPanel(tower);
+    }
+
+    deselectTurret() {
+        if (this.selectedTurret) {
+            this.selectedTurret.setStrokeStyle(0);
+            this.selectedTurret = null;
+        }
+        
+        if (this.rangeCircle) {
+            this.rangeCircle.destroy();
+            this.rangeCircle = null;
+        }
+
+        if (this.turretDetailsPanel) {
+            this.turretDetailsPanel.destroy();
+            this.turretDetailsPanel = null;
+        }
+    }
+
+    createTurretDetailsPanel(tower) {
+        const turretData = this.turretTypes[tower.type];
+        const padding = 10;
+        const panelWidth = 200;
+        const panelHeight = 180;
+        let panelX = tower.x + 30;
+        let panelY = tower.y;
+
+        // Calculate sell price - 70% of original cost
+        const sellPrice = Math.floor(turretData.cost * 0.7);
+
+        // Adjust panel position if it would go off screen
+        if (panelX + panelWidth > this.game.config.width) {
+            panelX = tower.x - panelWidth - 30;
+        }
+        if (panelY + panelHeight > this.gameArea.y + this.gameArea.height) {
+            panelY = this.gameArea.y + this.gameArea.height - panelHeight;
+        }
+
+        // Create panel container
+        this.turretDetailsPanel = this.add.container(panelX, panelY);
+
+        // Panel background
+        const background = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x000000, 0.8)
+            .setOrigin(0)
+            .setStrokeStyle(1, turretData.color);
+
+        // Panel contents
+        const titleText = this.add.text(padding, padding, turretData.name + ' Turret', {
+            font: 'bold 16px Arial',
+            fill: '#ffffff'
+        });
+
+        const stats = [
+            `Damage: ${tower.bulletDamage}`,
+            `Fire Rate: ${1000/tower.fireRate}/s`,
+            `Range: ${tower.range}`,
+            `Kills: ${tower.kills}`,
+            `Total Damage: ${Math.floor(tower.totalDamageDealt)}`
+        ];
+
+        const statsText = stats.map((stat, i) => {
+            return this.add.text(padding, 40 + (i * 20), stat, {
+                font: '14px Arial',
+                fill: '#ffffff'
+            });
+        });
+
+        // Update sell button with clearer price display
+        const sellButton = this.add.rectangle(padding, panelHeight - 30, panelWidth - (padding * 2), 25, 0x880000)
+            .setOrigin(0)
+            .setInteractive();
+        
+        const sellText = this.add.text(padding + (panelWidth - padding * 2)/2, panelHeight - 30 + 12.5, 
+            `Sell (+${sellPrice}$)`, {
+            font: '14px Arial',
+            fill: '#ffffff'
+        }).setOrigin(0.5);
+
+        // Update sell button handler
+        sellButton.on('pointerdown', (pointer) => {
+            pointer.event.stopPropagation(); // Prevent event from triggering tower placement
+            const oldCurrency = this.currency;
+            this.currency = oldCurrency + sellPrice;  // Add the sell price to existing currency
+            this.updateCurrencyDisplay();
+            this.towers = this.towers.filter(t => t !== tower);
+            tower.destroy();
+            this.deselectTurret();
+        });
+
+        // Add everything to the panel
+        this.turretDetailsPanel.add([background, titleText, ...statsText, sellButton, sellText]);
+        this.turretDetailsPanel.setDepth(100);
     }
   
     update(time, delta) {
@@ -691,7 +842,6 @@ class MainScene extends Phaser.Scene {
       // Update bullets and handle cleanup
       this.bullets.getChildren().forEach(bullet => {
         if (!bullet || !bullet.active) return;
-
         if (bullet.target && bullet.target.active && !bullet.target.reachedEnd) {
           let angle = Phaser.Math.Angle.Between(bullet.x, bullet.y, bullet.target.x, bullet.target.y);
           bullet.body.setVelocity(
@@ -702,7 +852,7 @@ class MainScene extends Phaser.Scene {
           bullet.destroy();
         }
   
-        // Remove bullet if it goes off screen
+        // Remove bullet if it goes off screen  
         if (bullet.active && (
           bullet.x < -50 || bullet.x > this.sys.canvas.width + 50 ||
           bullet.y < -50 || bullet.y > this.sys.canvas.height + 50
@@ -742,19 +892,33 @@ class MainScene extends Phaser.Scene {
       bullet.damage = tower.bulletDamage;
       // Store the target so we can update bullet velocity each frame.
       bullet.target = enemy;
-  
       this.bullets.add(bullet);
     }
   
     hitEnemy(bullet, enemy) {
         if (!enemy.reachedEnd) {
             enemy.hp -= bullet.damage;
+            
+            // Find the tower that shot this bullet and update its stats
+            const tower = this.towers.find(t => 
+                Phaser.Math.Distance.Between(bullet.x, bullet.y, t.x, t.y) < 20
+            );
+            if (tower) {
+                tower.totalDamageDealt += bullet.damage;
+                if (enemy.hp <= 0) {
+                    tower.kills++;
+                }
+                // Update panel if this tower is selected
+                if (this.selectedTurret === tower && this.turretDetailsPanel) {
+                    this.createTurretDetailsPanel(tower);
+                }
+            }
+
             bullet.destroy();
-        
+
             if (enemy.hp <= 0) {
                 if (enemy.spawnOnDeath) {
                     this.waveState.totalEnemiesInWave += enemy.spawnOnDeath;
-                    
                     for (let i = 0; i < enemy.spawnOnDeath; i++) {
                         this.spawnEnemy({
                             type: 'minion'
@@ -764,12 +928,10 @@ class MainScene extends Phaser.Scene {
     
                 this.currency += enemy.reward;
                 this.updateCurrencyDisplay();
-    
                 this.waveState.enemiesKilledThisWave++;
                 enemy.destroy();
                 this.score += enemy.score;
                 this.scoreText.setText(this.score);
-                
                 this.checkWaveCompletion();
             }
         }
