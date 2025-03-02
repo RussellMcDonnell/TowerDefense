@@ -144,6 +144,7 @@ class MainScene extends Phaser.Scene {
         // Add these properties after the other initialization
         this.selectedTurret = null;
         this.turretDetailsPanel = null;
+        this.placementPreview = null;  // Add this line after other initializations
 
       // Create UI background bars
       this.createUIBars();
@@ -214,6 +215,22 @@ class MainScene extends Phaser.Scene {
 
       // Add overlap so bullets can hit enemies
       this.physics.add.overlap(this.bullets, this.enemies, this.hitEnemy, null, this);
+
+      // Modify the input listener to also handle preview
+      this.input.on('pointermove', (pointer) => {
+        if (this.selectedTurretType !== null) {
+            this.updatePlacementPreview(pointer);
+        }
+      });
+
+      // Update the existing pointerdown listener
+      this.input.on('pointerdown', (pointer) => {
+        if (pointer.y > this.gameArea.y && pointer.y < this.gameArea.y + this.gameArea.height) {
+            if (!this.selectedTurret) {
+                this.placeTower(pointer);
+            }
+        }
+      });
     }
 
     createUIBars() {
@@ -714,6 +731,10 @@ class MainScene extends Phaser.Scene {
             btn.gradient.setAlpha(0.05);
             btn.container.y = 530;
         });
+        if (this.placementPreview) {
+            this.placementPreview.destroy();
+            this.placementPreview = null;
+        }
         this.selectedTurretType = null;
     }
 
@@ -825,6 +846,32 @@ class MainScene extends Phaser.Scene {
         // Add everything to the panel
         this.turretDetailsPanel.add([background, titleText, ...statsText, sellButton, sellText]);
         this.turretDetailsPanel.setDepth(100);
+    }
+
+    updatePlacementPreview(pointer) {
+        if (!this.placementPreview) {
+            // Create preview container
+            this.placementPreview = this.add.container(0, 0);
+            
+            // Create range circle
+            const turretData = this.turretTypes[this.selectedTurretType];
+            const rangeCircle = this.add.circle(0, 0, turretData.range)
+                .setStrokeStyle(2, turretData.color, 0.3)
+                .setFillStyle(turretData.color, 0.1);
+            
+            // Create turret preview
+            const turretPreview = this.add.circle(0, 0, 15, turretData.color, 0.7);
+            
+            this.placementPreview.add([rangeCircle, turretPreview]);
+        }
+
+        // Update preview position
+        this.placementPreview.setPosition(pointer.x, pointer.y);
+
+        // Update preview alpha based on whether we can afford it
+        const turretData = this.turretTypes[this.selectedTurretType];
+        const canAfford = this.currency >= turretData.cost;
+        this.placementPreview.setAlpha(canAfford ? 1 : 0.3);
     }
   
     update(time, delta) {
